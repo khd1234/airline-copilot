@@ -41,15 +41,19 @@ def _should_fallback(e: Exception) -> bool:
     return False
 
 
-def _call(messages: list[dict], stream: bool = False, **kwargs):
+def _call(messages: list[dict], stream: bool = False, prefer: str | None = None, **kwargs):
     last = None
-    for name, model, client in _clients:
+    # Preferred provider first; sorted() is stable, so the others keep their order.
+    ordered = sorted(_clients, key=lambda c: c[0] != prefer)
+    for name, model, client in ordered:
         try:
             result = client.chat.completions.create(
                 model=model, messages=messages, stream=stream, **kwargs
             )
             return result, name
         except Exception as e:
+            if isinstance(e, openai.APIStatusError):
+                log.error("Provider %s response: %s", name, e.response.text)
             if not _should_fallback(e):
                 raise
             log.warning("provider %s failed (%s); trying next", name, type(e).__name__)
@@ -57,9 +61,9 @@ def _call(messages: list[dict], stream: bool = False, **kwargs):
     raise last
 
 
-def chat_completion(messages: list[dict], **kwargs):
+def chat_completion(messages: list[dict], prefer: str | None = None, **kwargs):
     """Returns (response, provider_name). Pass tools=... for tool calling."""
-    return _call(messages, **kwargs)
+    return _call(messages, prefer=prefer, **kwargs)
 
 
 def create_stream(messages: list[dict]):

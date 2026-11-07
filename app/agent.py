@@ -15,7 +15,9 @@ def run_agent(messages: list[dict]) -> dict:
     provider = None
 
     for _ in range(MAX_STEPS):
-        response, provider = chat_completion(with_system(convo), tools=TOOLS)
+        response, provider = chat_completion(
+            with_system(convo), prefer=provider, tools=TOOLS
+        )
         msg = response.choices[0].message
 
         # No tool requested: this is the final answer.
@@ -24,19 +26,22 @@ def run_agent(messages: list[dict]) -> dict:
 
         # Add the assistant's tool request to the conversation (built by hand,
         # so no provider-specific extra fields leak between providers).
-        convo.append(
-            {
-                "role": "assistant",
-                "content": msg.content or "",
-                "tool_calls": [
-                    {
-                        "id": c.id,
-                        "type": "function",
-                        "function": {"name": c.function.name, "arguments": c.function.arguments},
-                    }
-                    for c in msg.tool_calls
-                ],
+        tool_calls = []
+        for c in msg.tool_calls:
+            entry = {
+                "id": c.id,
+                "type": "function",
+                "function": {"name": c.function.name, "arguments": c.function.arguments},
             }
+            # Gemini hides a "thought signature" in an extra field. It must be
+            # sent back unchanged, so copy it across if it exists.
+            extra = (c.model_extra or {}).get("extra_content")
+            if extra:
+                entry["extra_content"] = extra
+            tool_calls.append(entry)
+
+        convo.append(
+            {"role": "assistant", "content": msg.content or "", "tool_calls": tool_calls}
         )
 
         # Run each requested tool and feed the result back.
@@ -50,7 +55,7 @@ def run_agent(messages: list[dict]) -> dict:
             convo.append(
                 {"role": "tool", "tool_call_id": call.id, "content": json.dumps(result)}
             )
-
+        print("Final conversation:", json.dumps(convo, indent=2))
     return {
         "reply": "Sorry, I couldn't complete that request.",
         "trace": trace,

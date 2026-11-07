@@ -49,6 +49,9 @@ def get_fare_rules(fare_type: str):
         return {"error": "invalid fare type"}
     return _get(f"/fare-rules/{fare_type}")
 
+def list_airports():
+    return _get("/airports")
+
 
 # ---- what the model sees ----
 
@@ -93,12 +96,21 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_airports",
+            "description": "List all airports the airline serves.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
 ]
 
 REGISTRY = {
     "search_flights": search_flights,
     "get_booking": get_booking,
     "get_fare_rules": get_fare_rules,
+    "list_airports": list_airports,
 }
 
 
