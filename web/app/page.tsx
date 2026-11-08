@@ -75,34 +75,43 @@ export default function Home() {
   }
 
   return (
-    <main className="mx-auto flex h-screen max-w-2xl flex-col p-4">
-      <h1 className="mb-4 text-xl font-semibold">Airline Copilot</h1>
+    <main className="flex h-dvh w-full flex-col bg-white px-5 py-4 sm:px-8 lg:px-12">
+      <h1 className="mb-5 shrink-0 border-b border-slate-200 pb-4 text-lg font-semibold tracking-tight text-slate-900">
+        Airline Copilot
+      </h1>
 
-      <div className="flex-1 space-y-3 overflow-y-auto">
+      <div className="flex-1 space-y-5 overflow-y-auto py-2">
         {messages.length === 0 && (
-          <p className="text-sm text-gray-500">
-            Try: &ldquo;Find flights from Delhi to Mumbai tomorrow&rdquo; or &ldquo;Status of booking ABC123&rdquo;
+          <p className="text-sm text-slate-400">
+            Try: &ldquo;Find flights from Delhi to Mumbai tomorrow&rdquo; or
+            &ldquo;Status of booking ABC123&rdquo;
           </p>
         )}
 
         {messages.map((m, i) => (
           <div key={i} className={m.role === "user" ? "text-right" : ""}>
             {m.tools?.map((t, j) => (
-              <div key={j} className="mb-1 text-xs text-gray-500">
+              <div key={j} className="mb-2 text-xs text-slate-500">
                 {t.state === "running" ? "…" : t.state === "done" ? "✓" : "!"}{" "}
                 {TOOL_LABELS[t.name] ?? t.name}
               </div>
             ))}
+
             {m.content && (
               <div
-                className={`inline-block max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-left ${
-                  m.role === "user" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-900"
+                className={`inline-block max-w-[85%] whitespace-pre-wrap rounded-xl px-4 py-3 text-left text-sm leading-7 ${
+                  m.role === "user"
+                    ? "bg-slate-100 text-slate-800"
+                    : "text-slate-800"
                 }`}
               >
                 {m.content}
               </div>
             )}
-            {m.error && <div className="text-sm text-red-600">{m.error}</div>}
+
+            {m.error && (
+              <div className="mt-2 text-sm text-red-600">{m.error}</div>
+            )}
           </div>
         ))}
         <div ref={bottomRef} />
@@ -113,19 +122,20 @@ export default function Home() {
           e.preventDefault();
           send();
         }}
-        className="mt-4 flex gap-2"
+        className="mt-4 flex shrink-0 gap-2 rounded-xl border border-slate-300 bg-white p-2 transition focus-within:border-slate-500 focus-within:ring-2 focus-within:ring-slate-100"
       >
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask about flights, bookings, fare rules..."
-          className="flex-1 rounded border border-gray-300 px-3 py-2 text-gray-900"
+          className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400"
         />
         <button
-          disabled={busy}
-          className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
+          type="submit"
+          disabled={busy || !input.trim()}
+          className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Send
+          {busy ? "Sending..." : "Send"}
         </button>
       </form>
     </main>
