@@ -10,9 +10,8 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from .agent import run_agent
+from .agent import run_agent, stream_agent
 from .config import ALLOWED_ORIGINS, PROVIDERS
-from .llm import create_stream, with_system
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("copilot")
@@ -73,21 +72,17 @@ def chat(req: ChatRequest):
 
 @app.post("/chat/stream")
 def chat_stream(req: ChatRequest):
-    """Plain streaming chat, no tools yet. Day 3 streams the agent too."""
+    """Streaming agent: progress events plus tokens."""
     messages = [m.model_dump() for m in req.messages]
 
     def event_stream():
         try:
-            stream, provider = create_stream(with_system(messages))
-            for chunk in stream:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    token = chunk.choices[0].delta.content
-                    yield f"data: {json.dumps({'token': token})}\n\n"
-            yield f"data: {json.dumps({'done': True, 'provider': provider})}\n\n"
+            for event in stream_agent(messages):
+                yield f"data: {json.dumps(event)}\n\n"
         except Exception as e:
             log.exception("stream failed")
             _, msg = friendly_error(e)
-            yield f"data: {json.dumps({'error': msg})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'message': msg})}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

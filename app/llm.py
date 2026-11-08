@@ -66,9 +66,9 @@ def chat_completion(messages: list[dict], prefer: str | None = None, **kwargs):
     return _call(messages, prefer=prefer, **kwargs)
 
 
-def create_stream(messages: list[dict]):
-    """Returns (stream, provider_name)."""
-    return _call(messages, stream=True)
+def create_stream(messages: list[dict], prefer: str | None = None, **kwargs):
+    """Returns (stream, provider_name). Pass tools=... for tool calling."""
+    return _call(messages, stream=True, prefer=prefer, **kwargs)
 
 
 def with_system(messages: list[dict]) -> list[dict]:
