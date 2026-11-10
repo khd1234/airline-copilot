@@ -1,10 +1,23 @@
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
+export type FlightResult = {
+  flight_id: string;
+  flight_no: string;
+  airline: string;
+  origin: string;
+  destination: string;
+  departure: string;
+  arrival: string;
+  fare_type: string;
+  price_inr: number;
+  seats_left: number;
+};
+
 // Mirrors the events the backend sends.
 export type StreamEvent =
   | { type: "token"; text: string }
   | { type: "tool_start"; name: string; arguments: string }
-  | { type: "tool_result"; name: string; ok: boolean }
+  | { type: "tool_result"; name: string; ok: boolean; flight_results?: FlightResult[] }
   | { type: "done"; provider: string }
   | { type: "error"; message: string };
 

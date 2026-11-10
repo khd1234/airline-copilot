@@ -1,10 +1,27 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { streamChat, type ChatMessage } from "@/lib/chat";
+import { streamChat, type ChatMessage, type FlightResult } from "@/lib/chat";
 
-type ToolStatus = { name: string; state: "running" | "done" | "failed" };
-type UiMessage = ChatMessage & { tools?: ToolStatus[]; error?: string };
+type ToolStatus = {
+  name: string;
+  arguments: string;
+  state: "running" | "done" | "failed";
+};
+type UiMessage = ChatMessage & {
+  tools?: ToolStatus[];
+  flightResults?: FlightResult[];
+  error?: string;
+};
+
+function formatFlightDateTime(value: string) {
+  return new Date(value).toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 // Friendly labels for the status lines.
 const TOOL_LABELS: Record<string, string> = {
@@ -25,6 +42,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -38,6 +56,8 @@ export default function Home() {
   async function send() {
     const text = input.trim();
     if (!text || busy) return;
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setInput("");
     setBusy(true);
 
@@ -59,26 +79,53 @@ export default function Home() {
         } else if (event.type === "tool_start") {
           updateLast((m) => ({
             ...m,
-            tools: [...(m.tools ?? []), { name: event.name, state: "running" }],
+            tools: [
+              ...(m.tools ?? []),
+              { name: event.name, arguments: event.arguments, state: "running" },
+            ],
           }));
         } else if (event.type === "tool_result") {
-          updateLast((m) => ({ ...m, tools: finishTool(m.tools ?? [], event.name, event.ok) }));
+          updateLast((m) => ({
+            ...m,
+            tools: finishTool(m.tools ?? [], event.name, event.ok),
+            ...(event.flight_results !== undefined
+              ? { flightResults: event.flight_results }
+              : {}),
+          }));
         } else if (event.type === "error") {
           updateLast((m) => ({ ...m, error: event.message }));
         }
-      });
+      }, controller.signal);
     } catch (e) {
-      updateLast((m) => ({ ...m, error: e instanceof Error ? e.message : "Something went wrong" }));
+      if (!controller.signal.aborted) {
+        updateLast((m) => ({
+          ...m,
+          error: e instanceof Error ? e.message : "Something went wrong",
+        }));
+      }
     } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
       setBusy(false);
     }
   }
 
   return (
     <main className="flex h-dvh w-full flex-col bg-white px-5 py-4 sm:px-8 lg:px-12">
-      <h1 className="mb-5 shrink-0 border-b border-slate-200 pb-4 text-lg font-semibold tracking-tight text-slate-900">
-        Airline Copilot
-      </h1>
+      <header className="mb-5 flex shrink-0 items-center justify-between border-b border-slate-200 pb-4">
+        <h1 className="text-lg font-semibold tracking-tight text-slate-900">
+          Airline Copilot
+        </h1>
+        <button
+          type="button"
+          onClick={() => setMessages([])}
+          disabled={busy}
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          New chat
+        </button>
+      </header>
 
       <div className="flex-1 space-y-5 overflow-y-auto py-2">
         {messages.length === 0 && (
@@ -91,13 +138,70 @@ export default function Home() {
         {messages.map((m, i) => (
           <div key={i} className={m.role === "user" ? "text-right" : ""}>
             {m.tools?.map((t, j) => (
-              <div key={j} className="mb-2 text-xs text-slate-500">
+              <div
+                key={j}
+                title={t.arguments}
+                className="mb-2 text-xs text-slate-500"
+              >
                 {t.state === "running" ? "…" : t.state === "done" ? "✓" : "!"}{" "}
                 {TOOL_LABELS[t.name] ?? t.name}
               </div>
             ))}
 
-            {m.content && (
+            {m.flightResults !== undefined && (
+              <section className="space-y-3" aria-label="Flight results">
+                <h2 className="text-sm font-medium text-slate-700">
+                  {m.flightResults.length > 0
+                    ? `Available flights (${m.flightResults.length})`
+                    : "No flights found"}
+                </h2>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {m.flightResults.map((flight) => (
+                    <article
+                      key={flight.flight_id}
+                      className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-slate-900">{flight.airline}</p>
+                          <p className="text-xs text-slate-500">{flight.flight_no}</p>
+                        </div>
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
+                          {flight.fare_type}
+                        </span>
+                      </div>
+
+                      <div className="my-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                        <div>
+                          <p className="text-lg font-semibold text-slate-900">
+                            {formatFlightDateTime(flight.departure)}
+                          </p>
+                          <p className="text-sm text-slate-500">{flight.origin}</p>
+                        </div>
+                        <span aria-hidden="true" className="text-slate-400">→</span>
+                        <div className="text-right">
+                          <p className="text-lg font-semibold text-slate-900">
+                            {formatFlightDateTime(flight.arrival)}
+                          </p>
+                          <p className="text-sm text-slate-500">{flight.destination}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-end justify-between border-t border-slate-100 pt-3">
+                        <p className="text-xs text-slate-500">
+                          {flight.seats_left} {flight.seats_left === 1 ? "seat" : "seats"} left
+                        </p>
+                        <p className="text-lg font-semibold text-slate-900">
+                          ₹{flight.price_inr.toLocaleString("en-IN")}
+                        </p>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {m.content && m.flightResults === undefined && (
               <div
                 className={`inline-block max-w-[85%] whitespace-pre-wrap rounded-xl px-4 py-3 text-left text-sm leading-7 ${
                   m.role === "user"
@@ -122,7 +226,7 @@ export default function Home() {
           e.preventDefault();
           send();
         }}
-        className="mt-4 flex shrink-0 gap-2 rounded-xl border border-slate-300 bg-white p-2 transition focus-within:border-slate-500 focus-within:ring-2 focus-within:ring-slate-100"
+        className="mt-4 mb-6 flex shrink-0 gap-2 rounded-xl border border-slate-300 bg-white p-2 transition focus-within:border-slate-500 focus-within:ring-2 focus-within:ring-slate-100"
       >
         <input
           value={input}
@@ -130,13 +234,23 @@ export default function Home() {
           placeholder="Ask about flights, bookings, fare rules..."
           className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400"
         />
-        <button
-          type="submit"
-          disabled={busy || !input.trim()}
-          className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {busy ? "Sending..." : "Send"}
-        </button>
+        {busy ? (
+          <button
+            type="button"
+            onClick={() => abortControllerRef.current?.abort()}
+            className="rounded-lg border border-slate-300 px-5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+          >
+            Stop
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={!input.trim()}
+            className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Send
+          </button>
+        )}
       </form>
     </main>
   );

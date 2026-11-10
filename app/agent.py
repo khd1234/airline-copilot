@@ -117,7 +117,10 @@ def stream_agent(messages: list[dict]):
             yield {"type": "tool_start", "name": c["name"], "arguments": c["arguments"]}
             result = run_tool(c["name"], c["arguments"])
             ok = not (isinstance(result, dict) and "error" in result)
-            yield {"type": "tool_result", "name": c["name"], "ok": ok}
+            tool_result = {"type": "tool_result", "name": c["name"], "ok": ok}
+            if c["name"] == "search_flights" and ok:
+                tool_result["flight_results"] = result.get("flights", [])
+            yield tool_result
             convo.append({"role": "tool", "tool_call_id": c["id"], "content": json.dumps(result)})
 
     yield {"type": "error", "message": "Sorry, I couldn't complete that request."}
