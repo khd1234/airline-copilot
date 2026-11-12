@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: booking-core
+  datasource:
+    url: jdbc:postgresql://localhost:5432/airline
+    username: airline
+    password: airline
+  jpa:
+    hibernate:
+      ddl-auto: update   # creates/updates tables from the entities (fine for learning)
+    open-in-view: false
+    show-sql: true       # prints the SQL Spring runs, great for learning
+
+server:
+  port: 8080
